@@ -4,12 +4,12 @@ import peer from "../service/peer";
 import { useSocket } from "../context/SocketProvider";
 import Chat from "../components/Chat";
 
-
 const RoomPage = () => {
   const socket = useSocket();
   const [remoteSocketId, setRemoteSocketId] = useState(null);
   const [myStream, setMyStream] = useState();
   const [remoteStream, setRemoteStream] = useState();
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
 
   const handleUserJoined = useCallback(({ email, id }) => {
     console.log(`Email ${email} joined room`);
@@ -17,26 +17,34 @@ const RoomPage = () => {
   }, []);
 
   const handleCallUser = useCallback(async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true,
-    });
-    const offer = await peer.getOffer();
-    socket.emit("user:call", { to: remoteSocketId, offer });
-    setMyStream(stream);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      });
+      const offer = await peer.getOffer();
+      socket.emit("user:call", { to: remoteSocketId, offer });
+      setMyStream(stream);
+    } catch (error) {
+      console.error("Error accessing media devices.", error);
+    }
   }, [remoteSocketId, socket]);
 
   const handleIncommingCall = useCallback(
     async ({ from, offer }) => {
       setRemoteSocketId(from);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: true,
-      });
-      setMyStream(stream);
-      console.log(`Incoming Call`, from, offer);
-      const ans = await peer.getAnswer(offer);
-      socket.emit("call:accepted", { to: from, ans });
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: true,
+        });
+        setMyStream(stream);
+        console.log(`Incoming Call`, from, offer);
+        const ans = await peer.getAnswer(offer);
+        socket.emit("call:accepted", { to: from, ans });
+      } catch (error) {
+        console.error("Error accessing media devices.", error);
+      }
     },
     [socket]
   );
@@ -111,6 +119,15 @@ const RoomPage = () => {
     handleNegoNeedFinal,
   ]);
 
+  const toggleAudio = useCallback(() => {
+    if (myStream) {
+      myStream.getAudioTracks().forEach((track) => {
+        track.enabled = !track.enabled;
+      });
+      setIsAudioMuted((prev) => !prev);
+    }
+  }, [myStream]);
+
   return (
     <div>
       <h1>Room Page</h1>
@@ -124,9 +141,12 @@ const RoomPage = () => {
             playing
             muted
             height="100px"
-            width="200px"
+            width="100%"
             url={myStream}
           />
+          <button onClick={toggleAudio}>
+            {isAudioMuted ? "Unmute Audio" : "Mute Audio"}
+          </button>
         </>
       )}
       {remoteStream && (
@@ -134,11 +154,13 @@ const RoomPage = () => {
           <h1>Remote Stream</h1>
           <ReactPlayer
             playing
-            muted
             height="100px"
-            width="200px"
+            width="100%"
             url={remoteStream}
           />
+           <button onClick={toggleAudio}>
+            {isAudioMuted ? "Unmute Audio" : "Mute Audio"}
+          </button>
         </>
       )}
       <Chat />
